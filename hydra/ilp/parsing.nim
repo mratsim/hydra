@@ -19,7 +19,28 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import
-  ./ilp/[presburger, constraint, parsing]
-
-export presburger, constraint, parsing
+type
+  FormulaKind = enum
+    # Presburger Formula kind
+    fkAdd
+    fkSub
+    fkEQ        # equal
+    # fkLE      # lower or equal
+    # fkLT      # lower
+    fkGE        # greater or equal
+    fkGT        # greater
+    # pfkNE     # not equal
+    fkMul       # Multiply (lhs must be const)
+    # pfkLexLE
+    # pfkLexLR
+    fkLexGE     # Lexicographically greater or equal (i, j) >>= (k, l)
+    fkLexGR
+    fkMod       # Modulo
+    fkTrue      # True
+    fkFalse     # False
+    fkAnd       # And
+    fkOr        # Or
+    fkNot       # Negation
+    fkImplies   # Implies
+    fkExists    # Exists
+    fkNotExists # Not exists

@@ -20,6 +20,15 @@
 # THE SOFTWARE.
 
 import
-  ./ilp/[presburger, constraint, parsing]
+  # Internals
+  ./datatypes, ./constraint
 
-export presburger, constraint, parsing
+{.experimental: "notnil".}
+
+type
+  RawSet* = object
+    ## A raw set is:
+    ## * A space
+    ## * Constraints
+    space: Space
+    constraints: Constraint
