@@ -25,9 +25,8 @@ import
 
 type
   Label* = ref object
-    id*: Hash # Only needed in nimvm
-    when defined(debug):
-      name*: string
+    id*: Hash     # Only needed in nimvm
+    name*: string # Only needed for debug purposes
 
   TermKind* = enum
     tkVar
@@ -67,3 +66,24 @@ type
     # Key-idents mapping.
     # Should be sorted, Hashtables would be overkill
     idents*: seq[tuple[ident: string, term: Term]]
+
+  ConstraintKind* = enum
+    ## Constraint kind
+    ckEqualZero # Constraint = 0
+    ckGEZero    # Constraint >= 0
+
+  Constraint* = object
+    ## Constraint in "canonical" form
+    ## We will have to introduce extra divisors to the space
+    ## to handle `div`, `mod` and `There exists` formulas.
+    ##
+    ## Constraints should always be attached to a Set or Map
+    ## as they are always relative to their space.
+
+    # space*: Space
+    eqKind*: ConstraintKind
+
+    terms*: seq[Term]
+    coefs*: seq[int]
+
+    constant*: int
