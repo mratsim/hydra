@@ -61,12 +61,6 @@ proc envParamSetup(rawSet: NimNode,
   result.statement = newStmtList()
 
   if init:
-    result.statement.add quote do:
-      assert `rawset`.space.label.isNil
-      assert `rawSet`.space.envParams.len == 0
-      assert `rawset`.space.rank == 0
-      assert `rawset`.space.idents.len == 0
-
     for p in envParams:
       let p_str = $p
       let id_p = ident("envParam_" & p_str)
@@ -82,7 +76,45 @@ proc envParamSetup(rawSet: NimNode,
       
       result.envTerms.add envTerm
 
-macro incl*(rs: RawSet, expression: untyped): untyped =
+proc spaceSetup(rawSet: NimNode,
+                init: bool,
+                spaceAST: NimNode):
+                tuple[statement: NimNode, varTerms: seq[NimNode]] =
+  ## Check that the space are the same
+  ## Initialize them
+  ## Return statements and sequence
+  spaceAST.expectKind({nnkBracket, nnkBracketExpr})
+
+  result.statement = newStmtList()
+
+  if init:
+    var offset: int
+    # Named space - S[T, N]
+    if spaceAST.kind == nnkBracketExpr:
+      let name = $spaceAST[0]
+      result.statement.add quote do:
+        `rawSet`.space.name = `name`
+
+      offset = 1
+    # Anonymous space - [T, N]
+    else: 
+      offset = 0
+
+    let rank = spaceAST.len - offset
+    result.statement.add quote do:
+      `rawSet`.space.rank = `rank`
+    for i in offset ..< spaceAST.len:
+      let dim = i - offset
+      let variable = quote do:
+        Term(kind: tkVar, varDim: `dim`)
+
+      let v_str = $spaceAST[i]
+      result.statement.add quote do:
+        `rawSet`.space.idents.add (`v_str`, `variable`)
+
+      result.varTerms.add variable
+
+macro incl*(rawset: RawSet, expression: untyped): untyped =
   ## Add a constraint to an existing raw set
   ## Constraints added are cumulative to the existing ones
   result = newStmtList()
@@ -91,12 +123,28 @@ macro incl*(rs: RawSet, expression: untyped): untyped =
   expression.expectKind nnkStmtList
   expression[0].expectKind({nnkInfix, nnkTableConstr})
 
+  let init = true # TODO
+
+  if init:
+    result.add quote do:
+      assert `rawset`.space.name.len == 0
+      assert `rawSet`.space.envParams.len == 0
+      assert `rawset`.space.rank == 0
+      assert `rawset`.space.idents.len == 0
+
+  # Parsing: [T,N] -> { S[t,i] : 1<=t<=T and 1<=i<=N }
   if expression[0].kind == nnkInfix:
+    # Parsing the environment declaration
+    # [T, N] -> ...
     assert expression[0][0].eqIdent"->"
     expression[0][1].expectKind nnkBracket
 
-    let (envStmt, envLabels, envTerms) = envParamSetup(rs, true, expression[0][1])
-
-
+    let (envStmt, envLabels, envTerms) = envParamSetup(rawset, true, expression[0][1])
     result.add envStmt
-    result.add quote do: `envTerms`
+
+    # Parsing the space declaration
+    # ... -> { S[t,i] : ... }
+    expression[0][2].expectKind nnkTableConstr
+    expression[0][2][0].expectKind nnkExprColonExpr
+
+    let (spaceStmt, spaceVars) = spaceSetup(rawset, true, expression[0][2][0][0])

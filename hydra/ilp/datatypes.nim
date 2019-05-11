@@ -59,7 +59,7 @@ type
     # TODO: use the number of variables as a static parameter.
     
     # Unique fields
-    label*: Label
+    name*: string
     envParams*: seq[Label]
     rank*: Natural
 
