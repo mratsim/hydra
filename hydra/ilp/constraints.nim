@@ -33,10 +33,10 @@ proc isCmp(node: NimNode): bool =
       node[0].eqIdent">="
   )
 
-proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmts: var NimNode): tuple[lhs, rhs: NimNode] =
+proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmts: var NimNode): NimNode =
   ## Walk the expression
-  ## returns RHS and LHS of comparison
-  ## to bubble them up for nested comparisons
+  ## returns the RHS of comparison
+  ## to bubble it up for nested comparisons
   
   node.expectKind({nnkIdent, nnkIntLit, nnkInfix})
   case node.kind:
@@ -48,17 +48,17 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
       `constraint`.terms.add term
     stmts.add quote do:
       `constraint`.coefs.add `coef`
-    return (node, node)
+    return node
   of nnkIntLit:
     let val = coef * node.intVal
     stmts.add quote do:
       `constraint`.constant += `val`
-    return (node, node)
+    return node
   of nnkInfix:
     if node[0].eqIdent"+":
       discard walkExpr(rawSet, node[1], coef, constraint, stmts)
       discard walkExpr(rawSet, node[2], coef, constraint, stmts)
-      return (node, node)
+      return node
     elif node[0].eqIdent"-":
       if node.len == 2: # Unary
         discard walkExpr(rawSet, node[1], -coef, constraint, stmts)
@@ -67,7 +67,7 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
         discard walkExpr(rawSet, node[2], -coef, constraint, stmts)
       else:
         error"Unreachable"
-      return (node, node)
+      return node
     elif node[0].eqIdent"*":       
       if node[1].kind == nnkIntLit:
         discard walkExpr(rawSet, node[2], coef * node[1].intVal, constraint, stmts)
@@ -75,7 +75,7 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
         discard walkExpr(rawSet, node[1], coef * node[2].intVal, constraint, stmts)
       else:
         error "[Non-affine constraint error] One of the multiplication term must be a integer constant."
-      return (node, node)
+      return node
     elif node[0].eqIdent">=":
       # Canonical form is "expr >= 0"
       # left hand-side is as is
@@ -84,41 +84,63 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
       let subconstraint = genSym(nskVar, "constraintGE_")
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero)
-      let (_, lhs) = walkExpr(rawSet, node[1], 1, subconstraint, stmts)
-      let (rhs, _) = walkExpr(rawSet, node[2], -1, subconstraint, stmts)
+
+      let lhs = walkExpr(rawSet, node[1], 1, subconstraint, stmts)
+      let rhs = walkExpr(rawSet, node[2], -1, subconstraint, stmts)
+
+      # Nested comparison 0 <= i < N
+      # Solve 0 <= i then i < N
+      if lhs != node[1]:
+        discard walkExpr(rawSet, lhs, 1, subconstraint, stmts)
+
       stmts.add quote do:
         `rawSet`.constraints.add `subconstraint`
-      return (lhs, rhs)
+      return rhs
     elif node[0].eqIdent">":
       # a > 0   <=>   a - 1 >= 0
       let subconstraint = genSym(nskVar, "constraintGR_")
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero, constant: -1)
-      let (_, lhs) = walkExpr(rawSet, node[1], 1, subconstraint, stmts)
-      let (rhs, _) = walkExpr(rawSet, node[2], -1, subconstraint, stmts)
+
+      let lhs = walkExpr(rawSet, node[1], 1, subconstraint, stmts)
+      let rhs = walkExpr(rawSet, node[2], -1, subconstraint, stmts)
+
+      if lhs != node[1]:
+        discard walkExpr(rawSet, lhs, 1, subconstraint, stmts)
+
       stmts.add quote do:
         `rawSet`.constraints.add `subconstraint`
-      return (lhs, rhs)
+      return rhs
     elif node[0].eqIdent"<=":
       # a <= 10   <=>   0 <= 10 - a  <=>  10 - a >= 0
       let subconstraint = genSym(nskVar, "constraintLE_")
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero)
-      let (_, lhs) = walkExpr(rawSet, node[1], -1, subconstraint, stmts)
-      let (rhs, _) = walkExpr(rawSet, node[2], 1, subconstraint, stmts)
+
+      let lhs = walkExpr(rawSet, node[1], -1, subconstraint, stmts)
+      let rhs = walkExpr(rawSet, node[2], 1, subconstraint, stmts)
+
+      if lhs != node[1]:
+        discard walkExpr(rawSet, lhs, -1, subconstraint, stmts)
+
       stmts.add quote do:
         `rawSet`.constraints.add `subconstraint`
-      return (lhs, rhs)
+      return rhs
     elif node[0].eqIdent"<":
       # a < 10   <=>   0 < 10 - a  <=>  10 - a > 0 <=>  10 - a - 1 >= 0
       let subconstraint = genSym(nskVar, "constraintLR_")
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero, constant: -1)
-      let (_, lhs) = walkExpr(rawSet, node[1], -1, subconstraint, stmts)
-      let (rhs, _) = walkExpr(rawSet, node[2], 1, subconstraint, stmts)
+
+      let lhs = walkExpr(rawSet, node[1], -1, subconstraint, stmts)
+      let rhs = walkExpr(rawSet, node[2], 1, subconstraint, stmts)
+
+      if lhs != node[1]:
+        discard walkExpr(rawSet, lhs, -1, subconstraint, stmts)
+
       stmts.add quote do:
         `rawSet`.constraints.add `subconstraint`
-      return (lhs, rhs)
+      return rhs
     elif node[0].eqIdent"and":
       discard walkExpr(rawSet, node[1], 1, NimNode(), stmts)
       discard walkExpr(rawSet, node[2], 1, NimNode(), stmts)
