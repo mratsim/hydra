@@ -21,9 +21,9 @@
 
 import
   # Standard library
-  macros, algorithm, random, hashes,
+  macros, random, hashes, tables,
   # Internals
-  ./datatypes
+  ./datatypes, ./constraints
 
 {.experimental: "notnil".}
 
@@ -61,6 +61,8 @@ proc envParamSetup(rawSet: NimNode,
   result.statement = newStmtList()
 
   if init:
+    result.statement.add quote do:
+      `rawSet`.space.idents = initTable[string, Term](initialSize = 8)
     for p in envParams:
       let p_str = $p
       let id_p = ident("envParam_" & p_str)
@@ -72,7 +74,7 @@ proc envParamSetup(rawSet: NimNode,
       
       result.statement.add quote do:
         `rawSet`.space.envParams.add `id_p`
-        `rawSet`.space.idents.add (`p_str`, `envTerm`)
+        `rawSet`.space.idents[`p_str`] = `envTerm`
       
       result.envTerms.add envTerm
 
@@ -110,7 +112,7 @@ proc spaceSetup(rawSet: NimNode,
 
       let v_str = $spaceAST[i]
       result.statement.add quote do:
-        `rawSet`.space.idents.add (`v_str`, `variable`)
+        `rawSet`.space.idents[`v_str`] = `variable`
 
       result.varTerms.add variable
 
@@ -140,7 +142,9 @@ macro incl*(rawset: RawSet, expression: untyped): untyped =
     expression[0][1].expectKind nnkBracket
 
     let (envStmt, envLabels, envTerms) = envParamSetup(rawset, true, expression[0][1])
-    result.add envStmt
+    result.add nnkBlockStmt.newTree(
+      ident"envSetup", envStmt
+    )
 
     # Parsing the space declaration
     # ... -> { S[t,i] : ... }
@@ -148,3 +152,17 @@ macro incl*(rawset: RawSet, expression: untyped): untyped =
     expression[0][2][0].expectKind nnkExprColonExpr
 
     let (spaceStmt, spaceVars) = spaceSetup(rawset, true, expression[0][2][0][0])
+    result.add nnkBlockStmt.newTree(
+      ident"spaceSetup", spaceStmt
+    )
+
+    # Parsing the constraints
+    # ... -> { ... : 1<=t<=T and 1<=i<=N }
+    var constraints = newStmtList()
+    rawSet.parseConstraints(expression[0][2][0][1], constraints)
+
+    result.add nnkBlockStmt.newTree(
+      ident"constraintSetup", constraints
+    )
+
+  echo result.toStrLit

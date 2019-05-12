@@ -21,7 +21,7 @@
 
 import
   # Standard lib
-  hashes
+  hashes, tables
 
 type
   Label* = ref object
@@ -64,8 +64,7 @@ type
     rank*: Natural
 
     # Key-idents mapping.
-    # Should be sorted, Hashtables would be overkill
-    idents*: seq[tuple[ident: string, term: Term]]
+    idents*: Table[string, Term]
 
   ConstraintKind* = enum
     ## Constraint kind
@@ -87,3 +86,13 @@ type
     coefs*: seq[int]
 
     constant*: int
+
+    # Example:
+    # Constraint(
+    #   eqKind: ckGEZero
+    #   terms: @[i, j, N, T]
+    #   coefs: @[1, 2, -1, 1]
+    #   constant: 3    
+    # )
+    # Represents:
+    # i + 2j - N - T + 3 >= 0
