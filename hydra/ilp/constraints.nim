@@ -23,7 +23,7 @@ import
   # Standard lib
   macros, tables,
   # Internals
-  ./datatypes    
+  ./datatypes
 
 proc isCmp(node: NimNode): bool =
   node.kind == nnkInfix and (
@@ -37,7 +37,7 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
   ## Walk the expression
   ## returns the RHS of comparison
   ## to bubble it up for nested comparisons
-  
+
   node.expectKind({nnkIdent, nnkIntLit, nnkInfix})
   case node.kind:
   of nnkIdent:
@@ -68,7 +68,7 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
       else:
         error"Unreachable"
       return node
-    elif node[0].eqIdent"*":       
+    elif node[0].eqIdent"*":
       if node[1].kind == nnkIntLit:
         discard walkExpr(rawSet, node[2], coef * node[1].intVal, constraint, stmts)
       elif node[2].kind == nnkIntLit:
@@ -153,3 +153,53 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
 
 proc parseConstraints*(rawSet, expression: NimNode, stmts: var NimNode) =
   discard walkExpr(rawSet, expression, 1, NimNode(), stmts)
+
+func `$`*(c: Constraint): string =
+  assert c.terms.len == c.coefs.len
+  assert c.terms.len >= 1
+
+  for i in 0 ..< c.terms.len:
+    # Print coef if != 0
+    if c.coefs[i] > 1:
+      if i != 0:
+        result.add " + "
+      result.add $c.coefs[i]
+    elif c.coefs[i] == 1:
+      if i != 0:
+        result.add " + "
+    elif c.coefs[i] == -1:
+      if i == 0:
+        result.add "-"
+      else:
+        result.add " - "
+    elif c.coefs[i] < -1:
+      if i == 0:
+        result.add $c.coefs[i]
+      else:
+        result.add " - " & $(-c.coefs[i])
+
+    # Print term
+    if c.coefs[i] != 0:
+      case c.terms[i].kind
+      of tkVar:
+        result.add 'i'
+        result.add $c.terms[i].varDim
+      of tkEnvParam:
+        result.add c.terms[i].envParam.name
+      of tkDivisor:
+        raise newException(ValueError, "Not supported")
+
+  # Print constant if != 0
+  if c.constant > 0:
+    result.add " + "
+    result.add $c.constant
+  elif c.constant < 0:
+    result.add " - "
+    result.add $(-c.constant)
+
+  # Print in/equality constraint
+  case c.eqKind
+  of ckEqualZero:
+    result.add " = 0"
+  of ckGEZero:
+    result.add " >= 0"
