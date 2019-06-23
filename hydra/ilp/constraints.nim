@@ -33,7 +33,7 @@ proc isCmp(node: NimNode): bool =
       node[0].eqIdent">="
   )
 
-proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmts: var NimNode): NimNode =
+proc walkExpr*(rawSetOrMap, spaceFieldIdent, node: NimNode, coef: BiggestInt, constraint: NimNode, stmts: var NimNode): NimNode =
   ## Walk the expression
   ## returns the RHS of comparison
   ## to bubble it up for nested comparisons
@@ -44,7 +44,7 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
     # Find the term in the space
     let strId = $node
     stmts.add quote do:
-      let term = `rawSet`.space.idents[`strId`]
+      let term = `rawSetOrMap`.`spaceFieldIdent`.idents[`strId`]
       `constraint`.terms.add term
     stmts.add quote do:
       `constraint`.coefs.add `coef`
@@ -56,23 +56,23 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
     return node
   of nnkInfix:
     if node[0].eqIdent"+":
-      discard walkExpr(rawSet, node[1], coef, constraint, stmts)
-      discard walkExpr(rawSet, node[2], coef, constraint, stmts)
+      discard walkExpr(rawSetOrMap, spaceFieldIdent, node[1], coef, constraint, stmts)
+      discard walkExpr(rawSetOrMap, spaceFieldIdent, node[2], coef, constraint, stmts)
       return node
     elif node[0].eqIdent"-":
       if node.len == 2: # Unary
-        discard walkExpr(rawSet, node[1], -coef, constraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, node[1], -coef, constraint, stmts)
       elif node.len == 3: # Binary
-        discard walkExpr(rawSet, node[1], coef, constraint, stmts)
-        discard walkExpr(rawSet, node[2], -coef, constraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, node[1], coef, constraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, node[2], -coef, constraint, stmts)
       else:
         error"Unreachable"
       return node
     elif node[0].eqIdent"*":
       if node[1].kind == nnkIntLit:
-        discard walkExpr(rawSet, node[2], coef * node[1].intVal, constraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, node[2], coef * node[1].intVal, constraint, stmts)
       elif node[2].kind == nnkIntLit:
-        discard walkExpr(rawSet, node[1], coef * node[2].intVal, constraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, node[1], coef * node[2].intVal, constraint, stmts)
       else:
         error "[Non-affine constraint error] One of the multiplication term must be a integer constant."
       return node
@@ -85,16 +85,16 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero)
 
-      let lhs = walkExpr(rawSet, node[1], 1, subconstraint, stmts)
-      let rhs = walkExpr(rawSet, node[2], -1, subconstraint, stmts)
+      let lhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[1], 1, subconstraint, stmts)
+      let rhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[2], -1, subconstraint, stmts)
 
       # Nested comparison 0 <= i < N
       # Solve 0 <= i then i < N
       if lhs != node[1]:
-        discard walkExpr(rawSet, lhs, 1, subconstraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, lhs, 1, subconstraint, stmts)
 
       stmts.add quote do:
-        `rawSet`.constraints.add `subconstraint`
+        `rawSetOrMap`.constraints.add `subconstraint`
       return rhs
     elif node[0].eqIdent">":
       # a > 0   <=>   a - 1 >= 0
@@ -102,14 +102,14 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero, constant: -1)
 
-      let lhs = walkExpr(rawSet, node[1], 1, subconstraint, stmts)
-      let rhs = walkExpr(rawSet, node[2], -1, subconstraint, stmts)
+      let lhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[1], 1, subconstraint, stmts)
+      let rhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[2], -1, subconstraint, stmts)
 
       if lhs != node[1]:
-        discard walkExpr(rawSet, lhs, 1, subconstraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, lhs, 1, subconstraint, stmts)
 
       stmts.add quote do:
-        `rawSet`.constraints.add `subconstraint`
+        `rawSetOrMap`.constraints.add `subconstraint`
       return rhs
     elif node[0].eqIdent"<=":
       # a <= 10   <=>   0 <= 10 - a  <=>  10 - a >= 0
@@ -117,14 +117,14 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero)
 
-      let lhs = walkExpr(rawSet, node[1], -1, subconstraint, stmts)
-      let rhs = walkExpr(rawSet, node[2], 1, subconstraint, stmts)
+      let lhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[1], -1, subconstraint, stmts)
+      let rhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[2], 1, subconstraint, stmts)
 
       if lhs != node[1]:
-        discard walkExpr(rawSet, lhs, -1, subconstraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, lhs, -1, subconstraint, stmts)
 
       stmts.add quote do:
-        `rawSet`.constraints.add `subconstraint`
+        `rawSetOrMap`.constraints.add `subconstraint`
       return rhs
     elif node[0].eqIdent"<":
       # a < 10   <=>   0 < 10 - a  <=>  10 - a > 0 <=>  10 - a - 1 >= 0
@@ -132,18 +132,18 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
       stmts.add quote do:
         var `subconstraint` = Constraint(eqKind: ckGEZero, constant: -1)
 
-      let lhs = walkExpr(rawSet, node[1], -1, subconstraint, stmts)
-      let rhs = walkExpr(rawSet, node[2], 1, subconstraint, stmts)
+      let lhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[1], -1, subconstraint, stmts)
+      let rhs = walkExpr(rawSetOrMap, spaceFieldIdent, node[2], 1, subconstraint, stmts)
 
       if lhs != node[1]:
-        discard walkExpr(rawSet, lhs, -1, subconstraint, stmts)
+        discard walkExpr(rawSetOrMap, spaceFieldIdent, lhs, -1, subconstraint, stmts)
 
       stmts.add quote do:
-        `rawSet`.constraints.add `subconstraint`
+        `rawSetOrMap`.constraints.add `subconstraint`
       return rhs
     elif node[0].eqIdent"and":
-      discard walkExpr(rawSet, node[1], 1, NimNode(), stmts)
-      discard walkExpr(rawSet, node[2], 1, NimNode(), stmts)
+      discard walkExpr(rawSetOrMap, spaceFieldIdent, node[1], 1, NimNode(), stmts)
+      discard walkExpr(rawSetOrMap, spaceFieldIdent, node[2], 1, NimNode(), stmts)
     elif node[0].eqIdent"or":
       error "[\"or\" operator error] Expression requires a disjoint set or map"
     else:
@@ -151,8 +151,8 @@ proc walkExpr(rawSet, node: NimNode, coef: BiggestInt, constraint: NimNode, stmt
   else:
     error "Unreachable"
 
-proc parseConstraints*(rawSet, expression: NimNode, stmts: var NimNode) =
-  discard walkExpr(rawSet, expression, 1, NimNode(), stmts)
+proc parseSetConstraints*(rawSet, expression: NimNode, stmts: var NimNode) =
+  discard walkExpr(rawSet, ident"space", expression, 1, NimNode(), stmts)
 
 func `$`*(c: Constraint): string =
   assert c.terms.len == c.coefs.len

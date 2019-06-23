@@ -68,21 +68,21 @@ proc envParamSetup(rawSet: NimNode,
       let id_p = ident("envParam_" & p_str)
       result.envLabels.add id_p
       result.statement.add newLetStmt(id_p, newCall(bindSym"newLabel", newLit p_str))
-      
+
       let envTerm = quote do:
         Term(kind: tkEnvParam, envParam: `id_p`)
-      
+
       result.statement.add quote do:
         `rawSet`.space.envParams.add `id_p`
         `rawSet`.space.idents[`p_str`] = `envTerm`
-      
+
       result.envTerms.add envTerm
 
 proc spaceSetup(rawSet: NimNode,
                 init: bool,
                 spaceAST: NimNode):
                 tuple[statement: NimNode, varTerms: seq[NimNode]] =
-  ## Check that the space are the same
+  ## Check that the spaces are the same
   ## Initialize them
   ## Return statements and sequence
   spaceAST.expectKind({nnkBracket, nnkBracketExpr})
@@ -99,7 +99,7 @@ proc spaceSetup(rawSet: NimNode,
 
       offset = 1
     # Anonymous space - [T, N]
-    else: 
+    else:
       offset = 0
 
     let rank = spaceAST.len - offset
@@ -159,7 +159,7 @@ macro incl*(rawset: RawSet, expression: untyped): untyped =
     # Parsing the constraints
     # ... -> { ... : 1<=t<=T and 1<=i<=N }
     var constraints = newStmtList()
-    rawSet.parseConstraints(expression[0][2][0][1], constraints)
+    rawSet.parseSetConstraints(expression[0][2][0][1], constraints)
 
     result.add nnkBlockStmt.newTree(
       ident"constraintSetup", constraints
