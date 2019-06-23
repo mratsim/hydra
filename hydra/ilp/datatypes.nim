@@ -32,7 +32,7 @@ type
     tkVar
     tkEnvParam
     tkDivisor  ## Introduced for div, mod or quantifier elimination
-  
+
   Term* = object
     case kind*: TermKind
     of tkVar:
@@ -57,7 +57,7 @@ type
     ## * variable vector of rank 2
 
     # TODO: use the number of variables as a static parameter.
-    
+
     # Unique fields
     name*: string
     envParams*: seq[Label]
@@ -70,6 +70,9 @@ type
     ## Constraint kind
     ckEqualZero # Constraint = 0
     ckGEZero    # Constraint >= 0
+    ckMap       # Mapping between i and i', j and j', ...
+                # In a sequence of constraints,
+                # position will determine if the constraints is for i', j', ...
 
   Constraint* = object
     ## Constraint in "canonical" form
@@ -92,7 +95,7 @@ type
     #   eqKind: ckGEZero
     #   terms: @[i, j, N, T]
     #   coefs: @[1, 2, -1, 1]
-    #   constant: 3    
+    #   constant: 3
     # )
     # Represents:
     # i + 2j - N - T + 3 >= 0
