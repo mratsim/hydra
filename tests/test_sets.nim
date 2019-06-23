@@ -19,6 +19,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+import
+  unittest,
+  ../hydra/ilp/[datatypes, presburger_set, constraints]
+
 suite "Creating a Presburger set of constraints":
-  test "Creating a set containing even integers between 10 and 42":
-    discard
+  test "Smoke test":
+    var x = initRawSet()
+
+    x.incl:
+      # [T,N] -> { S[t,i] : 1<=t<=T and 1<=i<=N }
+      [T,N] -> { S[t,i] : 1<=t-i<T}
+
+    echo x
+
+  # test "Creating a set containing even integers between 10 and 42":
+  #   discard

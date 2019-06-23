@@ -112,6 +112,9 @@ type
     ## we have:
     ##   (i')   | 0 1 | (i)
     ##   (j') = | 1 0 | (j)
+    ##
+    ## in Hydra syntax:
+    ## { S[i,j] -> [j,i] }
 
     in_space*: Space not nil
     out_space*: Space not nil
