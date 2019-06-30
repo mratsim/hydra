@@ -64,7 +64,7 @@ type
     rank*: Natural
 
     # Key-idents mapping.
-    idents*: Table[string, Term]
+    idents*: OrderedTable[string, Term]
 
   ConstraintKind* = enum
     ## Constraint kind
@@ -99,3 +99,19 @@ type
     # )
     # Represents:
     # i + 2j - N - T + 3 >= 0
+
+
+func `==`*(a, b: Term): bool =
+  ## Object variants need an overload for equality
+  ## otherwise we get
+  ## "Error: parallel 'fields' iterator does not work for 'case' objects"
+  if a.kind != b.kind:
+    return false
+  elif a.kind == tkVar and a.varDim != b.varDim:
+    return false
+  elif a.kind == tkEnvParam and a.envParam != b.envParam:
+    return false
+  elif a.kind == tkDivisor and a.divId != b.divId:
+    return false
+  else:
+    return true

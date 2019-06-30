@@ -21,9 +21,9 @@
 
 import
   # Standard library
-  macros, random, hashes, tables,
+  macros, random, hashes, tables, algorithm,
   # Internals
-  ./datatypes, ./constraints
+  ./datatypes, ./constraints, ./matrix
 
 {.experimental: "notnil".}
 
@@ -34,6 +34,14 @@ type
     ## * Constraints
     space*: Space not nil
     constraints*: seq[Constraint]
+
+  FinalizedSet* = object
+    ## A raw set is:
+    ## * A space
+    ## * Constraints as Matrix
+    space*: Space not nil
+    eq*: Matrix
+    ineq*: Matrix
 
 var rng {.compileTime.} = initRand(0xDEADBEEF)
   ## Compile-time RNG seed
@@ -62,7 +70,7 @@ proc envParamSetup(rawSet: NimNode,
 
   if init:
     result.statement.add quote do:
-      `rawSet`.space.idents = initTable[string, Term](initialSize = 8)
+      `rawSet`.space.idents = initOrderedTable[string, Term](initialSize = 8)
     for p in envParams:
       let p_str = $p
       let id_p = ident("envParam_" & p_str)
@@ -166,3 +174,64 @@ macro incl*(rawset: RawSet, expression: untyped): untyped =
     )
 
   echo result.toStrLit
+
+proc finalize*(s: RawSet): FinalizedSet =
+
+  ## A finalizedSet stores its constraints in a matrix representation.
+  ##
+  ## Each rows represents a constraint
+  ## Columns represent coefficient
+  ##
+  ## Example:
+  ## Constraint(
+  ##   eqKind: ckGEZero
+  ##   terms: @[i, j, N, T]
+  ##   coefs: @[1, 2, -1, 1]
+  ##   constant: 3
+  ## )
+  ## Represents:
+  ## i + 2j - N - T + 3 >= 0
+  ## In matrix form
+  ## [1, 2, -1, -1, 3]
+  ## If data is stored in the order
+  ##                    | i |
+  ##                    | j |
+  ##                    | N |
+  ##                    | T |
+  ##                    | 1 |
+
+  # First convert the space to a sequence of terms in immutable order.
+  # Then check the coefficient associated for each term
+
+  result.space = s.space
+  result.eq = newMatrix(
+                nrows = 0,
+                # Terms appearing in idents + the constant term
+                ncols = result.space.idents.len + 1
+              )
+  result.ineq = newMatrix(
+                  nrows = 0,
+                  # Terms appearing in idents + the constant term
+                  ncols = result.space.idents.len + 1
+                )
+
+  var coefs: seq[int]
+  for constraint in s.constraints:
+    coefs.setLen(0)
+    for term in result.space.idents.values: # TODO inefficient
+      let idx = constraint.terms.find(term) # TODO inefficient
+      if idx == -1:
+        coefs.add 0
+      else:
+        coefs.add constraint.coefs[idx]
+
+    if constraint.eqKind == ckEqualZero:
+      result.eq.appendCoefsAndConstant(
+        coefs,
+        constraint.constant
+      )
+    else:
+      result.ineq.appendCoefsAndConstant(
+        coefs,
+        constraint.constant
+      )
