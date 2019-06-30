@@ -69,8 +69,6 @@ proc envParamSetup(rawSet: NimNode,
   result.statement = newStmtList()
 
   if init:
-    result.statement.add quote do:
-      `rawSet`.space.idents = initOrderedTable[string, Term](initialSize = 8)
     for p in envParams:
       let p_str = $p
       let id_p = ident("envParam_" & p_str)
@@ -124,6 +122,28 @@ proc spaceSetup(rawSet: NimNode,
 
       result.varTerms.add variable
 
+proc parseSetDecl(result: var NimNode, rawSet, setDecl: NimNode) =
+  # Parsing the space declaration
+  # ... -> { S[t,i] : ... }
+  # or plain
+  # { S[t,i] : ... }
+  setDecl.expectKind nnkTableConstr
+  setDecl[0].expectKind nnkExprColonExpr
+
+  let (spaceStmt, spaceVars) = spaceSetup(rawset, true, setDecl[0][0])
+  result.add nnkBlockStmt.newTree(
+    ident"spaceSetup", spaceStmt
+  )
+
+  # Parsing the constraints
+  # ... -> { ... : 1<=t<=T and 1<=i<=N }
+  var constraints = newStmtList()
+  rawSet.parseSetConstraints(setDecl[0][1], constraints)
+
+  result.add nnkBlockStmt.newTree(
+    ident"constraintSetup", constraints
+  )
+
 macro incl*(rawset: RawSet, expression: untyped): untyped =
   ## Add a constraint to an existing raw set
   ## Constraints added are cumulative to the existing ones
@@ -142,6 +162,8 @@ macro incl*(rawset: RawSet, expression: untyped): untyped =
       assert `rawset`.space.rank == 0
       assert `rawset`.space.idents.len == 0
 
+      `rawSet`.space.idents = initOrderedTable[string, Term](initialSize = 8)
+
   # Parsing: [T,N] -> { S[t,i] : 1<=t<=T and 1<=i<=N }
   if expression[0].kind == nnkInfix:
     # Parsing the environment declaration
@@ -154,24 +176,10 @@ macro incl*(rawset: RawSet, expression: untyped): untyped =
       ident"envSetup", envStmt
     )
 
-    # Parsing the space declaration
-    # ... -> { S[t,i] : ... }
-    expression[0][2].expectKind nnkTableConstr
-    expression[0][2][0].expectKind nnkExprColonExpr
+    parseSetDecl(result, rawSet, expression[0][2])
 
-    let (spaceStmt, spaceVars) = spaceSetup(rawset, true, expression[0][2][0][0])
-    result.add nnkBlockStmt.newTree(
-      ident"spaceSetup", spaceStmt
-    )
-
-    # Parsing the constraints
-    # ... -> { ... : 1<=t<=T and 1<=i<=N }
-    var constraints = newStmtList()
-    rawSet.parseSetConstraints(expression[0][2][0][1], constraints)
-
-    result.add nnkBlockStmt.newTree(
-      ident"constraintSetup", constraints
-    )
+  else: # kind: nnkStmtList
+    parseSetDecl(result, rawSet, expression[0])
 
   echo result.toStrLit
 

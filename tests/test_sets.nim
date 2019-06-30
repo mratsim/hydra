@@ -21,17 +21,42 @@
 
 import
   unittest,
-  ../hydra/ilp/[datatypes, presburger_set, constraints]
+  ../hydra/ilp/[datatypes, presburger_set, constraints, matrix]
 
 suite "Creating a Presburger set of constraints":
-  test "Smoke test":
+  test "Smoke test - with environment parameters":
     var x = initRawSet()
 
     x.incl:
-      # [T,N] -> { S[t,i] : 1<=t<=T and 1<=i<=N }
       [T,N] -> { S[t,i] : 1<=t-i<T}
 
+    echo "Raw set: "
     echo x
+
+  test "Smoke test - without environment parameters":
+    var x = initRawSet()
+
+    x.incl:
+      { S[i,j] : 1<=i<=2 and 1<=j<=3 }
+
+    echo "Raw set: "
+    echo x
+
+    echo "\nFinalized set: "
+    echo x.finalize().ineq
+
+  test "Smoke test - with unused environment parameters":
+    var x = initRawSet()
+
+    x.incl:
+      [T,N] -> { S[i,j] : 1<=i<=2 and 1<=j<=3 }
+
+    echo "Raw set: "
+    echo x
+
+    echo "\nFinalized set: "
+    echo x.finalize().ineq
+
 
   # test "Creating a set containing even integers between 10 and 42":
   #   discard
