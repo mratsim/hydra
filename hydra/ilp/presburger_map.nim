@@ -223,6 +223,7 @@ proc parseSchedule*(rawMap, expression: NimNode, stmts: var NimNode) =
   # We have 1 constraint per iteration variable in the range space (out space)
 
   expression.expectKind nnkBracket
+  var dim = 0
   for iterator_mapping in expression:
     let constraint = genSym(nskVar, "constraintMap")
     stmts.add quote do:
@@ -230,6 +231,8 @@ proc parseSchedule*(rawMap, expression: NimNode, stmts: var NimNode) =
     rawMap.parseMapConstraints(iterator_mapping, constraint, stmts)
     stmts.add quote do:
       `rawMap`.constraints.add `constraint`
+      `rawMap`.out_space.idents["o" & $`dim`] = Term(kind: tkVar, varDim: `dim`)
+    dim += 1
 
 proc parseMapDecl(result: var NimNode, rawMap, mapDecl: NimNode) =
     # Parsing the domain space declaration
@@ -290,3 +293,39 @@ macro add*(rawmap: RawMap, expression: untyped): untyped =
     parseMapDecl(result, rawMap, expression[0])
 
   echo result.toStrLit
+
+
+func finalize*(m: RawMap): FinalizedMap =
+  ## A finalized map stores the relation between the
+  ## new and old indices as a matrix T
+  ## y = Tx
+  ##
+  ## with
+  ##   (i')   | 0 1 | (i)
+  ##   (j') = | 1 0 | (j)
+
+  # TODO when constants are involved (loop skewing) we do
+  #   (i')   | 0 1 c0'| (i)
+  #   (j') = | 1 0 c1'| (j)
+  #                     (1)
+  # There is no constant<->constant mapping in the resulting indices
+  # the pure constants are the same as for the origin indices
+
+  result.in_space = m.in_space
+  result.out_space = m.out_space
+
+  result.relation = newMatrix(
+    nrows = result.out_space.idents.len,
+    ncols = result.in_space.idents.len + 1
+  )
+
+  # We assume that constraints respect the resulting out space order
+  for oidx in 0 ..< result.out_space.idents.len:
+    var iidx = 0
+    for term in result.in_space.idents.values:
+      let tidx = m.constraints[oidx].terms.find(term)
+      if tidx != -1:
+        result.relation[oidx, iidx] = m.constraints[oidx].coefs[tidx]
+      # else assign 0 (but matrix is already zero initialized)
+      iidx += 1
+    result.relation[oidx, result.in_space.idents.len] = m.constraints[oidx].constant

@@ -183,7 +183,7 @@ macro incl*(rawset: RawSet, expression: untyped): untyped =
 
   echo result.toStrLit
 
-proc finalize*(s: RawSet): FinalizedSet =
+func finalize*(s: RawSet): FinalizedSet =
 
   ## A finalizedSet stores its constraints in a matrix representation.
   ##

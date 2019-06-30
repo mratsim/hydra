@@ -19,41 +19,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-type
-  Matrix* = object
-    ## A simple matrix type
-    ## to represent matrices of constraints
-    ## and polyhedral loop transformations
-    # The type must work at Nim compile-time
-    # The matrix is row-major
-    nrows*, ncols*: int
-    data: seq[int]
+import
+  unittest,
+  ../hydra/ilp/[datatypes, presburger_map, constraints, matrix]
 
-func newMatrix*(nrows, ncols: int): Matrix =
-  result = Matrix(
-    nrows: nrows,
-    ncols: ncols,
-    data: newSeq[int](nrows * ncols)
-  )
+suite "Creating a Presburger Map":
+  test "Smoke test - without environment parameters":
+    var m = initRawMap()
 
-func `[]`*(m: Matrix, row, col: int): int =
-  m.data[row*m.ncols + col]
+    m.add:
+      {S[i,j] -> [j, i]}
 
-func `[]=`*(m: var Matrix, row, col, val: int) =
-  m.data[row*m.ncols + col] = val
+    echo "Raw map: "
+    echo m
 
-func appendCoefsAndConstant*(m: var Matrix, coefs: openarray[int], constant: int) =
-  # We store our coefficients + constant in columns
-  doAssert coefs.len + 1 == m.ncols
-
-  m.data.add coefs
-  m.data.add constant
-  m.nrows += 1
-
-func `$`*(m: Matrix): string =
-
-  for row in 0 ..< m.nrows:
-    result.add "\n|"
-    for col in 0 ..< m.ncols:
-      result.add "\t" & $m[row, col]
-    result.add "\t|"
+    echo "\nFinalized map: "
+    echo m.finalize().relation
