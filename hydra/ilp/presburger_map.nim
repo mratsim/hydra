@@ -23,7 +23,7 @@ import
   # Standard library
   macros, random, hashes, tables,
   # Internals
-  ./datatypes, ./constraints
+  ./datatypes, ./constraints, ./matrix
 
 {.experimental: "notnil".}
 
@@ -120,6 +120,11 @@ type
     out_space*: Space not nil
     constraints*: seq[Constraint]
 
+  FinalizedMap* = object
+    in_space*: Space not nil
+    out_space*: Space not nil
+    relation*: Matrix
+
 proc newLabel(name: string): Label =
   new result
   when defined(nimvm):
@@ -144,9 +149,6 @@ proc envParamSetup(rawMap: NimNode,
   result.statement = newStmtList()
 
   if init:
-    result.statement.add quote do:
-      `rawMap`.in_space.idents = initTable[string, Term](initialSize = 8)
-      `rawMap`.out_space.idents = initTable[string, Term](initialSize = 8)
     for p in envParams:
       let p_str = $p
       let id_p = ident("envParam_" & p_str)
@@ -229,6 +231,27 @@ proc parseSchedule*(rawMap, expression: NimNode, stmts: var NimNode) =
     stmts.add quote do:
       `rawMap`.constraints.add `constraint`
 
+proc parseMapDecl(result: var NimNode, rawMap, mapDecl: NimNode) =
+    # Parsing the domain space declaration
+    # ... -> { S[i,j] -> ... }
+    mapDecl.expectKind nnkCurly
+    mapDecl[0].expectKind nnkInfix
+    assert mapDecl[0][0].eqIdent"->"
+
+    let (spaceStmt, spaceVars) = spaceSetup(rawmap, true, mapDecl[0][1])
+    result.add nnkBlockStmt.newTree(
+      ident"spaceSetup", spaceStmt
+    )
+
+    # Parsing the range space declaration (i.e. out space or new schedule)
+    # ... -> { ... -> [j, i] }
+    var constraints = newStmtList()
+    rawmap.parseSchedule(mapDecl[0][2], constraints)
+
+    result.add nnkBlockStmt.newTree(
+      ident"constraintSetup", constraints
+    )
+
 macro add*(rawmap: RawMap, expression: untyped): untyped =
   ## Add a relation to an existing map
 
@@ -236,7 +259,7 @@ macro add*(rawmap: RawMap, expression: untyped): untyped =
   echo expression.treeRepr
 
   expression.expectKind nnkStmtList
-  expression[0].expectKind(nnkInfix)
+  expression[0].expectKind({nnkInfix, nnkCurly})
 
   let init = true # TODO
 
@@ -247,34 +270,23 @@ macro add*(rawmap: RawMap, expression: untyped): untyped =
       assert `rawMap`.in_space.rank == 0
       assert `rawMap`.in_space.idents.len == 0
 
+      `rawMap`.in_space.idents = initOrderedTable[string, Term](initialSize = 8)
+      `rawMap`.out_space.idents = initOrderedTable[string, Term](initialSize = 8)
+
   # Parsing: [T,N] -> { S[i,j] -> [j, i] } (a loop interchange)
-  if expression[0][1].kind == nnkBracket:
+  if expression[0].kind == nnkInfix:
     # Parsing the environment declaration
     # [T, N] -> ...
+    assert expression[0][0].eqIdent"->"
+    expression[0][1].expectKind nnkBracket
 
     let (envStmt, envLabels, envTerms) = envParamSetup(rawmap, true, expression[0][1])
     result.add nnkBlockStmt.newTree(
       ident"envSetup", envStmt
     )
 
-    # Parsing the domain space declaration
-    # ... -> { S[i,j] -> ... }
-    expression[0][2].expectKind nnkCurly
-    expression[0][2][0].expectKind nnkInfix
-    assert expression[0][2][0][0].eqIdent"->"
-
-    let (spaceStmt, spaceVars) = spaceSetup(rawmap, true, expression[0][2][0][1])
-    result.add nnkBlockStmt.newTree(
-      ident"spaceSetup", spaceStmt
-    )
-
-    # Parsing the range space declaration (i.e. out space or new schedule)
-    # ... -> { ... -> [j, i] }
-    var constraints = newStmtList()
-    rawmap.parseSchedule(expression[0][2][0][2], constraints)
-
-    result.add nnkBlockStmt.newTree(
-      ident"constraintSetup", constraints
-    )
+    parseMapDecl(result, rawMap, expression[0][2])
+  else: # kind: nnkStmtList
+    parseMapDecl(result, rawMap, expression[0])
 
   echo result.toStrLit
