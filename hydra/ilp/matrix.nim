@@ -39,7 +39,7 @@ func newMatrix*(nrows, ncols: int): Matrix =
 func `[]`*(m: Matrix, row, col: int): int =
   m.data[row*m.ncols + col]
 
-func `[]=`*(m: var Matrix, row, col, val: int): int =
+func `[]=`*(m: var Matrix, row, col, val: int) =
   m.data[row*m.ncols + col] = val
 
 func appendCoefsAndConstant*(m: var Matrix, coefs: openarray[int], constant: int) =

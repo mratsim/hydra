@@ -21,7 +21,7 @@
 
 import
   # Standard library
-  macros, random, hashes, tables, algorithm,
+  macros, random, hashes, tables,
   # Internals
   ./datatypes, ./constraints, ./matrix
 
