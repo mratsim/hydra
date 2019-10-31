@@ -37,4 +37,4 @@ proc test(name: string, lang: string = "c") =
   setCommand lang, "tests/" & name & ".nim"
 
 task test, "Run all tests - test and production implementation":
-  test "sets"
+  test "test_sets"
